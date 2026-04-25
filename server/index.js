@@ -13,6 +13,9 @@ const db = createClient({
     authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
+// Store init promise so all requests wait for DB to be ready
+let dbInitPromise = null;
+
 // Helper: run a single write statement
 async function dbRun(sql, args = []) {
     return db.execute({ sql, args });
@@ -151,8 +154,19 @@ async function initDB() {
     }
 }
 
-// Run DB init (non-blocking — Vercel will handle this before first request)
-initDB();
+
+// Run DB init and store the promise — requests will wait for this
+dbInitPromise = initDB();
+
+// Middleware: wait for DB to be fully ready before handling any request
+app.use(async (req, res, next) => {
+    try {
+        await dbInitPromise;
+        next();
+    } catch (err) {
+        res.status(500).json({ error: 'Database initialization failed' });
+    }
+});
 
 // --- Endpoints ---
 
